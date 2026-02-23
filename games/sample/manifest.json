@@ -1,0 +1,8 @@
+{
+  "id": "lorl_sample_dots",
+  "name": "Dot Arena",
+  "author": "Lorl Team",
+  "description": "Move your dot around and see other players in real time! A demo multiplayer game.",
+  "version": "1.0.0",
+  "lorlVersion": "1"
+}

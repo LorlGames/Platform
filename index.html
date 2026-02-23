@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lorl — Play Together</title>
+  <link rel="stylesheet" href="css/main.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
+</head>
+<body>
+  <!-- NAV -->
+  <nav class="nav">
+    <div class="nav-logo">
+      <span class="logo-l">L</span><span class="logo-orl">orl</span>
+    </div>
+    <div class="nav-links">
+      <button class="nav-btn" id="btn-home">Home</button>
+      <button class="nav-btn" id="btn-library">Library</button>
+      <button class="nav-btn" id="btn-settings">Settings</button>
+    </div>
+    <div class="nav-user">
+      <span id="username-display">Guest</span>
+      <button class="btn-primary small" id="btn-set-name">Set Name</button>
+    </div>
+  </nav>
+
+  <!-- PAGES -->
+  <main>
+    <!-- HOME -->
+    <section id="page-home" class="page active">
+      <div class="hero">
+        <div class="hero-text">
+          <h1 class="hero-title">Play.<br>Together.<br><span class="accent">Anywhere.</span></h1>
+          <p class="hero-sub">Open a game, pick a server, jump in with friends.<br>No accounts. No installs. Just play.</p>
+          <div class="hero-actions">
+            <button class="btn-primary large" id="btn-open-game">Open .lorlgame File</button>
+            <button class="btn-secondary large" id="btn-browse-library">Browse Library</button>
+          </div>
+        </div>
+        <div class="hero-visual">
+          <div class="floating-cards">
+            <div class="fcard fc1">🎮</div>
+            <div class="fcard fc2">🌐</div>
+            <div class="fcard fc3">⚡</div>
+            <div class="fcard fc4">🎯</div>
+          </div>
+        </div>
+      </div>
+      <div class="recent-section">
+        <h2 class="section-title">Recently Played</h2>
+        <div class="games-grid" id="recent-games">
+          <div class="empty-state">No games played yet. Open a .lorlgame file to get started!</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- LIBRARY -->
+    <section id="page-library" class="page">
+      <div class="page-header">
+        <h1>Game Library</h1>
+        <button class="btn-primary" id="btn-open-game-lib">+ Open .lorlgame</button>
+      </div>
+      <div class="games-grid" id="library-games">
+        <div class="empty-state">Your library is empty.<br>Open a .lorlgame file to add games.</div>
+      </div>
+    </section>
+
+    <!-- SETTINGS -->
+    <section id="page-settings" class="page">
+      <div class="page-header">
+        <h1>Settings</h1>
+      </div>
+      <div class="settings-grid">
+        <div class="settings-card">
+          <h2>Profile</h2>
+          <label>Display Name</label>
+          <div class="input-row">
+            <input type="text" id="settings-name" placeholder="Enter your name" maxlength="24" />
+            <button class="btn-primary" id="save-name">Save</button>
+          </div>
+        </div>
+        <div class="settings-card">
+          <h2>Server Hosts</h2>
+          <p class="card-desc">Server hosts sync player data between players in a game. Add your own or use community hosts.</p>
+          <div id="server-list"></div>
+          <div class="add-server-form">
+            <h3>Add Server Host</h3>
+            <label>Name</label>
+            <input type="text" id="server-name-input" placeholder="My Server" />
+            <label>URL</label>
+            <input type="text" id="server-url-input" placeholder="wss://my-server.example.com" />
+            <button class="btn-primary" id="add-server-btn">Add Server</button>
+          </div>
+        </div>
+        <div class="settings-card">
+          <h2>Data</h2>
+          <button class="btn-danger" id="clear-library">Clear Library</button>
+          <button class="btn-danger" id="clear-all">Reset Everything</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- GAME VIEWER -->
+    <section id="page-game" class="page">
+      <div class="game-topbar">
+        <button class="btn-secondary" id="btn-exit-game">← Exit Game</button>
+        <span id="game-title-display">Game</span>
+        <div class="game-server-info">
+          <span id="game-server-label">Singleplayer</span>
+          <span id="game-players-label"></span>
+        </div>
+      </div>
+      <iframe id="game-frame" sandbox="allow-scripts allow-same-origin" allowfullscreen></iframe>
+    </section>
+  </main>
+
+  <!-- MODALS -->
+  <div id="modal-overlay" class="modal-overlay hidden">
+    <!-- Server Select -->
+    <div id="modal-server" class="modal hidden">
+      <h2>Launch Game</h2>
+      <p id="modal-game-name-display"></p>
+      <div class="modal-section">
+        <h3>Choose Mode</h3>
+        <div class="mode-options">
+          <label class="mode-option">
+            <input type="radio" name="play-mode" value="singleplayer" checked />
+            <div class="mode-card">
+              <div class="mode-icon">👤</div>
+              <div class="mode-label">Singleplayer</div>
+              <div class="mode-desc">Play alone, no server needed</div>
+            </div>
+          </label>
+          <label class="mode-option">
+            <input type="radio" name="play-mode" value="multiplayer" />
+            <div class="mode-card">
+              <div class="mode-icon">🌐</div>
+              <div class="mode-label">Multiplayer</div>
+              <div class="mode-desc">Play with others via a server</div>
+            </div>
+          </label>
+        </div>
+      </div>
+      <div class="modal-section" id="server-select-section" style="display:none">
+        <h3>Select Server Host</h3>
+        <div id="modal-server-list"></div>
+        <p class="small-note">Don't have a server? <a href="https://github.com/lorl-platform/lorl-server" target="_blank">Host your own →</a></p>
+      </div>
+      <div class="modal-actions">
+        <button class="btn-secondary" id="modal-cancel">Cancel</button>
+        <button class="btn-primary" id="modal-launch">Launch</button>
+      </div>
+    </div>
+
+    <!-- Set Name -->
+    <div id="modal-name" class="modal hidden">
+      <h2>Set Your Name</h2>
+      <p>Choose a display name other players will see.</p>
+      <input type="text" id="modal-name-input" placeholder="Enter name" maxlength="24" />
+      <div class="modal-actions">
+        <button class="btn-secondary" id="modal-name-cancel">Cancel</button>
+        <button class="btn-primary" id="modal-name-save">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Hidden file input -->
+  <input type="file" id="file-input" accept=".lorlgame,.zip" style="display:none" />
+
+  <script src="js/cookies.js"></script>
+  <script src="js/library.js"></script>
+  <script src="js/server.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

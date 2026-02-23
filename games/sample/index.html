@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dot Arena</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: #0d0d1a;
+      color: #e0e0ff;
+      font-family: 'Courier New', monospace;
+      overflow: hidden;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    #hud {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      padding: 0.5rem 1rem;
+      background: rgba(255,255,255,0.05);
+      border-bottom: 1px solid rgba(255,255,255,0.1);
+      font-size: 0.85rem;
+      flex-shrink: 0;
+    }
+    #status { color: #888; }
+    #status.connected { color: #4ade80; }
+    #player-count { color: #a78bfa; margin-left: auto; }
+    #arena-wrap {
+      flex: 1;
+      position: relative;
+      overflow: hidden;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+    #instructions {
+      position: absolute;
+      bottom: 1rem;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0,0,0,0.6);
+      padding: 0.5rem 1rem;
+      border-radius: 8px;
+      font-size: 0.78rem;
+      color: #888;
+      pointer-events: none;
+    }
+    #name-tag {
+      position: absolute;
+      top: 0.5rem;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(124,58,237,0.3);
+      border: 1px solid rgba(124,58,237,0.5);
+      padding: 0.3rem 0.8rem;
+      border-radius: 20px;
+      font-size: 0.8rem;
+      color: #c4b5fd;
+    }
+  </style>
+</head>
+<body>
+  <div id="hud">
+    <span>🎮 Dot Arena</span>
+    <span id="status">Waiting for Lorl...</span>
+    <span id="player-count"></span>
+  </div>
+  <div id="arena-wrap">
+    <div id="name-tag"></div>
+    <canvas id="canvas"></canvas>
+    <div id="instructions">WASD or Arrow Keys to move</div>
+  </div>
+
+  <script>
+  const canvas = document.getElementById('canvas');
+  const ctx = canvas.getContext('2d');
+  const statusEl = document.getElementById('status');
+  const playerCountEl = document.getElementById('player-count');
+  const nameTagEl = document.getElementById('name-tag');
+
+  // ── World ──
+  const WORLD_W = 1200, WORLD_H = 800;
+  const SPEED = 3;
+  const DOT_RADIUS = 14;
+  const TRAIL_LENGTH = 20;
+
+  let myId = null, myName = 'You', myColor = randomColor();
+  let players = {}; // id -> { x, y, name, color, trail }
+  let myPos = { x: WORLD_W / 2, y: WORLD_H / 2 };
+  let keys = {};
+  let multiplayer = false;
+  let frameCount = 0;
+
+  function randomColor() {
+    const hue = Math.random() * 360;
+    return `hsl(${hue}, 80%, 65%)`;
+  }
+
+  function resize() {
+    canvas.width = canvas.offsetWidth;
+    canvas.height = canvas.offsetHeight;
+  }
+  resize();
+  window.addEventListener('resize', resize);
+
+  // ── Input ──
+  window.addEventListener('keydown', e => { keys[e.key] = true; e.preventDefault(); });
+  window.addEventListener('keyup', e => { keys[e.key] = false; });
+
+  // Touch / mouse support
+  let touchTarget = null;
+  canvas.addEventListener('mousemove', e => {
+    const rect = canvas.getBoundingClientRect();
+    const mx = (e.clientX - rect.left) / rect.width * WORLD_W;
+    const my = (e.clientY - rect.top) / rect.height * WORLD_H;
+    touchTarget = { x: mx, y: my };
+  });
+  canvas.addEventListener('touchmove', e => {
+    e.preventDefault();
+    const rect = canvas.getBoundingClientRect();
+    const t = e.touches[0];
+    touchTarget = {
+      x: (t.clientX - rect.left) / rect.width * WORLD_W,
+      y: (t.clientY - rect.top) / rect.height * WORLD_H,
+    };
+  }, { passive: false });
+  canvas.addEventListener('mouseleave', () => { touchTarget = null; });
+
+  // ── Game Loop ──
+  function update() {
+    frameCount++;
+
+    // Movement
+    let dx = 0, dy = 0;
+    if (keys['ArrowLeft'] || keys['a'] || keys['A']) dx -= SPEED;
+    if (keys['ArrowRight'] || keys['d'] || keys['D']) dx += SPEED;
+    if (keys['ArrowUp'] || keys['w'] || keys['W']) dy -= SPEED;
+    if (keys['ArrowDown'] || keys['s'] || keys['S']) dy += SPEED;
+
+    // Mouse/touch movement
+    if (touchTarget && (Math.abs(dx) < 0.1 && Math.abs(dy) < 0.1)) {
+      const tdx = touchTarget.x - myPos.x;
+      const tdy = touchTarget.y - myPos.y;
+      const dist = Math.sqrt(tdx*tdx + tdy*tdy);
+      if (dist > 5) {
+        dx = (tdx / dist) * SPEED;
+        dy = (tdy / dist) * SPEED;
+      }
+    }
+
+    // Normalize diagonal
+    if (dx && dy) { const f = 1/Math.sqrt(2); dx *= f; dy *= f; }
+
+    const prevX = myPos.x, prevY = myPos.y;
+    myPos.x = Math.max(DOT_RADIUS, Math.min(WORLD_W - DOT_RADIUS, myPos.x + dx));
+    myPos.y = Math.max(DOT_RADIUS, Math.min(WORLD_H - DOT_RADIUS, myPos.y + dy));
+
+    // Update my player entry
+    if (myId) {
+      if (!players[myId]) players[myId] = { x: myPos.x, y: myPos.y, name: myName, color: myColor, trail: [] };
+      const me = players[myId];
+      if (me.trail.length === 0 || Math.hypot(myPos.x - me.trail[0].x, myPos.y - me.trail[0].y) > 3) {
+        me.trail.unshift({ x: myPos.x, y: myPos.y });
+        if (me.trail.length > TRAIL_LENGTH) me.trail.pop();
+      }
+      me.x = myPos.x;
+      me.y = myPos.y;
+
+      // Send update every 3 frames (multiplayer)
+      if (multiplayer && window.Lorl && window.Lorl.isConnected() && frameCount % 3 === 0) {
+        const moved = Math.abs(myPos.x - prevX) > 0.01 || Math.abs(myPos.y - prevY) > 0.01;
+        if (moved || frameCount % 60 === 0) {
+          window.Lorl.updateState({ x: myPos.x, y: myPos.y, color: myColor, name: myName });
+        }
+      }
+    }
+  }
+
+  function draw() {
+    const W = canvas.width, H = canvas.height;
+    ctx.clearRect(0, 0, W, H);
+
+    // Background grid
+    ctx.strokeStyle = 'rgba(255,255,255,0.04)';
+    ctx.lineWidth = 1;
+    const cellW = W / 20, cellH = H / 14;
+    for (let x = 0; x <= W; x += cellW) { ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,H); ctx.stroke(); }
+    for (let y = 0; y <= H; y += cellH) { ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke(); }
+
+    // Scale to world
+    const scaleX = W / WORLD_W, scaleY = H / WORLD_H;
+
+    // Draw all players
+    Object.values(players).forEach(p => {
+      const px = p.x * scaleX;
+      const py = p.y * scaleY;
+      const r = DOT_RADIUS * Math.min(scaleX, scaleY);
+      const isMe = p.id === myId || (myId && p === players[myId]);
+
+      // Trail
+      if (p.trail && p.trail.length > 1) {
+        for (let i = 1; i < p.trail.length; i++) {
+          const alpha = (1 - i / p.trail.length) * 0.4;
+          const tr = r * (1 - i / p.trail.length) * 0.7;
+          ctx.beginPath();
+          ctx.arc(p.trail[i].x * scaleX, p.trail[i].y * scaleY, Math.max(1, tr), 0, Math.PI*2);
+          ctx.fillStyle = p.color.replace('hsl', 'hsla').replace(')', `, ${alpha})`);
+          ctx.fill();
+        }
+      }
+
+      // Glow
+      const glow = ctx.createRadialGradient(px,py,0,px,py,r*2.5);
+      glow.addColorStop(0, p.color.replace('hsl','hsla').replace(')', ', 0.3)'));
+      glow.addColorStop(1, 'transparent');
+      ctx.beginPath();
+      ctx.arc(px, py, r*2.5, 0, Math.PI*2);
+      ctx.fillStyle = glow;
+      ctx.fill();
+
+      // Dot
+      ctx.beginPath();
+      ctx.arc(px, py, r, 0, Math.PI*2);
+      ctx.fillStyle = p.color;
+      if (isMe) {
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      }
+      ctx.fill();
+
+      // Name
+      ctx.font = `bold ${Math.max(10, r * 0.9)}px 'Courier New'`;
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#fff';
+      ctx.shadowColor = 'rgba(0,0,0,0.8)';
+      ctx.shadowBlur = 4;
+      ctx.fillText(p.name || 'Player', px, py - r - 4);
+      ctx.shadowBlur = 0;
+    });
+  }
+
+  function loop() {
+    update();
+    draw();
+    requestAnimationFrame(loop);
+  }
+  loop();
+
+  // ── Lorl SDK integration ──
+  window.addEventListener('lorlReady_internal', () => {});
+
+  // Called when Lorl SDK is initialized
+  function onLorlReady(data) {
+    multiplayer = data.multiplayer;
+    statusEl.textContent = multiplayer ? `Connected to ${data.serverUrl}` : 'Singleplayer';
+    statusEl.className = multiplayer ? 'connected' : '';
+
+    if (window.Lorl) {
+      myId = window.Lorl.getPlayerId() || 'local_' + Math.random().toString(36).slice(2);
+      myName = window.Lorl.getUsername() || 'You';
+    } else {
+      myId = 'local_player';
+      myName = 'You';
+    }
+
+    nameTagEl.textContent = myName;
+    players[myId] = { id: myId, x: myPos.x, y: myPos.y, name: myName, color: myColor, trail: [] };
+
+    if (multiplayer && window.Lorl) {
+      window.Lorl.on('playerJoined', (p) => {
+        if (p.id !== myId) {
+          players[p.id] = { id: p.id, x: WORLD_W/2, y: WORLD_H/2, name: p.username || 'Player', color: randomColor(), trail: [] };
+          updatePlayerCount();
+        }
+      });
+      window.Lorl.on('playerLeft', (p) => {
+        delete players[p.id];
+        updatePlayerCount();
+      });
+      window.Lorl.on('playerUpdated', ({ id, data }) => {
+        if (id === myId) return;
+        if (!players[id]) players[id] = { id, x: data.x||0, y: data.y||0, name: data.name||'Player', color: data.color||randomColor(), trail: [] };
+        const prev = players[id];
+        if (prev.trail.length === 0 || Math.hypot(data.x - prev.trail[0]?.x, data.y - prev.trail[0]?.y) > 3) {
+          prev.trail.unshift({ x: prev.x, y: prev.y });
+          if (prev.trail.length > TRAIL_LENGTH) prev.trail.pop();
+        }
+        prev.x = data.x ?? prev.x;
+        prev.y = data.y ?? prev.y;
+        if (data.name) prev.name = data.name;
+        if (data.color) prev.color = data.color;
+      });
+      window.Lorl.on('roomState', ({ players: ps }) => {
+        ps.forEach(p => {
+          if (p.id !== myId) {
+            players[p.id] = { id: p.id, x: p.data?.x||WORLD_W/2, y: p.data?.y||WORLD_H/2, name: p.username||'Player', color: randomColor(), trail: [] };
+          }
+        });
+        updatePlayerCount();
+      });
+      window.Lorl.on('connected', () => updatePlayerCount());
+      window.Lorl.on('disconnected', () => {
+        statusEl.textContent = 'Disconnected';
+        statusEl.className = '';
+      });
+    }
+    updatePlayerCount();
+  }
+
+  function updatePlayerCount() {
+    const count = Object.keys(players).length;
+    playerCountEl.textContent = `👥 ${count} player${count !== 1 ? 's' : ''}`;
+    window.parent.postMessage({ lorlPlayerCount: count }, '*');
+  }
+
+  // Wait for Lorl SDK
+  if (window.Lorl) {
+    window.Lorl.on('ready', onLorlReady);
+  } else {
+    window.addEventListener('message', (e) => {
+      if (e.data && e.data.lorlInit) {
+        const check = setInterval(() => {
+          if (window.Lorl) {
+            clearInterval(check);
+            window.Lorl.on('ready', onLorlReady);
+          }
+        }, 50);
+      }
+    });
+    // Fallback if no message received (embedded directly)
+    setTimeout(() => {
+      if (!myId) onLorlReady({ multiplayer: false });
+    }, 1000);
+  }
+  </script>
+</body>
+</html>
