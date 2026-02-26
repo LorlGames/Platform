@@ -153,6 +153,28 @@
       </div>
     </div>
 
+      <!-- LOBBY BROWSER — injected after #server-select-section -->
+      <div id="lobby-browser-section" class="modal-section" style="display:none">
+        <h3>Lobbies</h3>
+        <div id="lobby-browser-list" class="lobby-list"></div>
+    
+        <div class="lobby-actions">
+          <div class="lobby-join-id-row">
+            <input type="text" id="lobby-join-id-input" placeholder="Join by lobby ID…" />
+            <button class="btn-secondary" id="lobby-join-id-btn">Join</button>
+          </div>
+          <div class="lobby-create-row">
+            <input type="text" id="lobby-create-name" placeholder="Lobby name…" value="My Lobby" />
+            <label class="lobby-public-label">
+              <input type="checkbox" id="lobby-create-public" />
+              Public
+            </label>
+            <input type="number" id="lobby-create-max" placeholder="Max" min="2" max="50" value="8" style="width:60px" />
+            <button class="btn-primary" id="lobby-create-btn">Create Lobby</button>
+          </div>
+        </div>
+      </div>
+
     <!-- Set Name -->
     <div id="modal-name" class="modal hidden">
       <h2>Set Your Name</h2>
