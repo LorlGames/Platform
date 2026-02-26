@@ -129,15 +129,18 @@
     pendingGameMeta = meta;
     $('#modal-game-name-display').textContent = meta.name;
     selectedServerId = null;
-
+    _lobbyList = [];
+    _selectedLobbyId = null;
+  
     // Reset mode
     $$('input[name="play-mode"]').forEach(r => r.checked = r.value === 'singleplayer');
     $('#server-select-section').style.display = 'none';
-
+    _hideLobbySection();
+  
     renderModalServers();
     showModal('modal-server');
-
-    // Check server statuses
+  
+    // Ping servers
     const servers = LorldStorage.getServers();
     if (servers.length > 0) {
       LorldServer.pingAll(servers).then(statuses => {
@@ -151,8 +154,10 @@
     radio.onchange = () => {
       const multiplayer = radio.value === 'multiplayer';
       $('#server-select-section').style.display = multiplayer ? 'block' : 'none';
+      if (!multiplayer) _hideLobbySection();
     };
   });
+
 
   $('#modal-cancel').onclick = () => { pendingGameMeta = null; closeModal(); };
   $('#modal-launch').onclick = () => {
@@ -176,14 +181,15 @@
     }
     servers.forEach(s => {
       const el = LorldUI.renderModalServerItem(s, {
-        onSelect: (id) => {
-          selectedServerId = id;
+        function _onServerSelected(serverId) {
+          selectedServerId = serverId;
           $$('.modal-server-item').forEach(i => i.classList.remove('selected'));
-          list.querySelector(`[data-id="${id}"]`)?.classList.add('selected');
-        },
-        selected: s.id === selectedServerId,
-      });
-      list.appendChild(el);
+          const listEl = $('#modal-server-list');
+          listEl.querySelector(`[data-id="${serverId}"]`)?.classList.add('selected');
+        
+          // Load lobby list for this server + game
+          _loadAndRenderLobbies(serverId);
+        }
     });
   }
 
@@ -356,6 +362,78 @@
       LorldUI.showNotification('Everything reset.', 'info');
     }
   };
+
+  let _lobbyList = [];
+  let _selectedLobbyId = null;
+  let _createLobbyMode = false;
+  
+  function _hideLobbySection() {
+    const s = $('#lobby-browser-section');
+    if (s) s.style.display = 'none';
+  }
+  
+  function _showLobbySection() {
+    const s = $('#lobby-browser-section');
+    if (s) s.style.display = 'block';
+  }
+  
+  async function _loadAndRenderLobbies(serverId) {
+    const server = LorldStorage.getServers().find(s => s.id === serverId);
+    if (!server || !pendingGameMeta) return;
+  
+    _showLobbySection();
+    const lobbyListEl = $('#lobby-browser-list');
+    if (lobbyListEl) lobbyListEl.innerHTML = '<div class="lobby-loading">Loading lobbies…</div>';
+  
+    try {
+      // Use HTTP endpoint to list public lobbies
+      const httpUrl = server.url.replace(/^wss?:\/\//, 'https://').replace(/^ws:\/\//, 'http://');
+      const res = await fetch(`${httpUrl}/lobbies?game=${encodeURIComponent(pendingGameMeta.id)}`, { signal: AbortSignal.timeout(5000) });
+      const json = await res.json();
+      _lobbyList = json.lobbies || [];
+    } catch (_) {
+      _lobbyList = [];
+    }
+  
+    _renderLobbyBrowser();
+  }
+  
+  function _renderLobbyBrowser() {
+    const container = $('#lobby-browser-list');
+    if (!container) return;
+  
+    if (_lobbyList.length === 0 && !_createLobbyMode) {
+      container.innerHTML = `
+        <div class="lobby-empty">
+          <div class="lobby-empty-icon">🏠</div>
+          <div class="lobby-empty-text">No public lobbies found</div>
+          <div class="lobby-empty-sub">Create one below, or join a private lobby by ID</div>
+        </div>`;
+    } else {
+      container.innerHTML = '';
+      _lobbyList.forEach(lobby => {
+        const el = document.createElement('div');
+        el.className = 'lobby-item' + (_selectedLobbyId === lobby.id ? ' selected' : '');
+        el.dataset.id = lobby.id;
+        el.innerHTML = `
+          <div class="lobby-item-name">${_escHtml(lobby.name.replace(/^PUBLIC_/, ''))}</div>
+          <div class="lobby-item-meta">
+            <span class="lobby-players">${lobby.playerCount}/${lobby.maxPlayers} players</span>
+            <span class="lobby-id">ID: ${_escHtml(lobby.id)}</span>
+          </div>`;
+        el.onclick = () => {
+          _selectedLobbyId = lobby.id;
+          _createLobbyMode = false;
+          _renderLobbyBrowser();
+        };
+        container.appendChild(el);
+      });
+    }
+  }
+  
+  function _escHtml(s) {
+    return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
 
   // ── Init ──
   navigate('home');
